@@ -1,0 +1,20 @@
+// Copyright 2023 Techmo sp. z o.o.
+
+syntax = "proto3";
+
+package techmo.api;
+
+import "google/protobuf/any.proto";
+
+
+//
+message Status {
+    //
+    int32 code = 1;
+
+    //
+    string message = 2;
+
+    //
+    repeated google.protobuf.Any details = 3;
+}

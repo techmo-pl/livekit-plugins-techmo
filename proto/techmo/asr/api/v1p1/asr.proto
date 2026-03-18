@@ -1,0 +1,481 @@
+// Copyright 2023 Techmo sp. z o.o.
+
+syntax = "proto3";
+
+package techmo.asr.api.v1p1;
+
+import "google/protobuf/duration.proto";
+import "techmo/api/status.proto";
+
+
+// An automatic speech recognition (ASR) service providing a solution for
+// speech-to-text conversion extended by the assessment of additional speech
+// and speaker features.
+service Asr {
+  // Perform bidirectional streaming recognition.
+  rpc StreamingRecognize(stream StreamingRecognizeRequest)
+    returns (stream StreamingRecognizeResponse) {}
+}
+
+// A message streamed from the client through
+// the [`StreamingRecognize`](#StreamingRecognize) method.
+message StreamingRecognizeRequest {
+  oneof request_content {
+    // The immutable initial configuration of the request.
+    // Must be sent once in the request's first message.
+    StreamingRecognizeRequestConfig config = 1;
+
+    // The message controlling the processing flow of the request.
+    // May be sent multiple times except in the request's first message.
+    StreamingRecognizeRequestControlMessage control_message = 2;
+
+    // The data contents of the request itself.
+    // May be sent multiple times except in the request's first message.
+    StreamingRecognizeRequestData data = 3;
+  }
+}
+
+// A message holding configuration of
+// a [`StreamingRecognize`](#StreamingRecognize) request.
+message StreamingRecognizeRequestConfig {
+  // Part of the configuration for the request's audio content.
+  AudioConfig audio_config = 1;
+
+  // Part of the configuration for the request's result form.
+  ResultConfig result_config = 2;
+
+  // Part of the configuration for the request's processing flow.
+  StreamingConfig streaming_config = 3;
+
+  // Part of the configuration for speech recognition.
+  SpeechRecognitionConfig speech_recognition_config = 4;
+
+  // Part of the configuration for age recognition.
+  AgeRecognitionConfig age_recognition_config = 5;
+
+  // Part of the configuration for gender recognition.
+  GenderRecognitionConfig gender_recognition_config = 6;
+
+  // Part of the configuration for language recognition.
+  LanguageRecognitionConfig language_recognition_config = 7;
+}
+
+// Result configuration of
+// a [`StreamingRecognize`](#StreamingRecognize) request.
+message ResultConfig {
+  // The switch that toggles continuous recognition into single utterance mode.
+  // The service returns a final result for each end of utterance it detects in
+  // the audio, which may occur multiple times during a request.
+  // If enabled, the request terminates right after its first final result.
+  bool enable_single_utterance = 1;
+
+  // The switch that allows interim results.
+  // If enabled, results containing tentative hypotheses may be returned in
+  // addition to final ones.
+  // The service should silently ignore this field if it is unsupported.
+  bool enable_interim_results = 2;
+
+  // The switch to allow the service merging responses in the "hold response"
+  // state.
+  // If enabled and there is more than a single response held, the service does
+  // not return them in a batch. Instead, it tries to merge their results into
+  // a single response.
+  // The service should respond with the `INVALID_ARGUMENT` gRPC status code
+  // if the `recognition_alternatives_limit` field
+  // of the [`SpeechRecognitionConfig`](#SpeechRecognitionConfig) message is
+  // greater than 1.
+  // New in v1p1.
+  bool enable_held_responses_merging = 3;
+}
+
+// Streaming configuration of
+// a [`StreamingRecognize`](#StreamingRecognize) request.
+message StreamingConfig {
+  reserved 1; // bool enable_single_utterance = 1;
+
+  // The switch that enables manual control of the input timer.
+  // The timer imposes two constraints: one that finalizes recognition after
+  // a specified period unless speech is detected, and the other that limits
+  // the total time for an utterance. Manual control allows recognition to
+  // begin but delays enforcement of these constraints. The timer restarts
+  // after each detected end of utterance (each final result).
+  // If enabled, the timer does not start automatically. Instead, it can be
+  // initiated by sending
+  // a [`StreamingRecognizeRequestControlMessage`](#StreamingRecognizeRequestControlMessage)
+  // with the `start_input_timer` field set to `true` as needed. This should
+  // occur after the beginning of the request and be repeated after each final
+  // result.
+  bool enable_manual_input_timer = 2;
+
+  // The switch to automatically set the service in the "hold response" state
+  // at the beginning of the request and after each final result.
+  // The "hold response" state means that the internal recognition process
+  // continues, but results are kept, not returned. When needed, the state can
+  // be toggled into the "give response" state by sending
+  // the [`StreamingRecognizeRequestControlMessage`](#StreamingRecognizeRequestControlMessage)
+  // message with the `give_response` field set to `true`.
+  // In the "give response" state the service responds as soon as it is ready.
+  // Any held responses may be returned in a batch or as a single merged
+  // response, provided that the `enable_held_responses_merging` field
+  // of the [`ResultConfig`](#ResultConfig) message is set to `true`.
+  // New in v1p1.
+  bool enable_auto_hold_response = 3;
+}
+
+// Audio configuration of
+// a [`StreamingRecognize`](#StreamingRecognize) request.
+message AudioConfig {
+  // The possible audio encodings.
+  enum AudioEncoding {
+    // Unspecified audio encoding.
+    UNSPECIFIED = 0;
+
+    // Linear pulse-code modulation of uncompressed 16-bit signed little-endian
+    // samples.
+    LINEAR16 = 1;
+
+    // Free Lossless Audio Codec ([FLAC](https://wiki.xiph.org/FLAC)).
+    // The encoding requires only about half the bandwidth of `LINEAR16`.
+    // 16-bit and 24-bit samples. Not all fields in `STREAMINFO` are supported.
+    // When set, the service ignores the `sampling_rate_hz` field and detects
+    // the actual value from audio header instead.
+    FLAC = 2;
+
+    // Ogg Encapsulated Opus Audio Codec ([OggOpus](https://wiki.xiph.org/OggOpus)).
+    // When set, the service ignores the `sampling_rate_hz` field and detects
+    // the actual value from audio header instead.
+    OGG_OPUS = 6;
+
+    // MP3 (ISO/IEC 11172-3 and ISO/IEC 13818-3).
+    // Only constant bitrate.
+    // When set, the service ignores the `sampling_rate_hz` field and detects
+    // the actual value from audio header instead.
+    MP3 = 8;
+  }
+
+  // The encoding of the audio data sent in the request. Single channel (mono)
+  // audio is assumed.
+  // The service should respond with the `INVALID_ARGUMENT` gRPC status code
+  // if the encoding is `UNSPECIFIED`.
+  // The service should respond with the `FAILED_PRECONDITION` gRPC status code
+  // if the encoding is not supported.
+  AudioEncoding encoding = 1;
+
+  // The sampling rate of the audio data sent in the request.
+  // The service should silently ignore the field for encodings that are sent
+  // along wtih headers, and detect the value from them instead.
+  // The service should respond with the `INVALID_ARGUMENT` gRPC status code
+  // if the value is not greater than 0.
+  float sampling_rate_hz = 2;
+}
+
+// Configuration of age recognition.
+message AgeRecognitionConfig {
+  // The switch that enables age recognition for the request.
+  // If disabled or unspecified, the related results are excluded.
+  // The service responds with the `FAILED_PRECONDITION` gRPC status code
+  // if requested but not enabled.
+  bool enable_age_recognition = 1;
+}
+
+// Configuration of gender recognition.
+message GenderRecognitionConfig {
+  // The switch that enables gender recognition for the request.
+  // If disabled or unspecified, the related results are excluded.
+  // The service responds with the `FAILED_PRECONDITION` gRPC status code
+  // if requested but not enabled.
+  bool enable_gender_recognition = 1;
+}
+
+// Configuration of language recognition.
+message LanguageRecognitionConfig {
+  // The switch that enables language recognition for the request.
+  // If disabled or unspecified, the related results are excluded.
+  // The service responds with the `FAILED_PRECONDITION` gRPC status code
+  // if requested but not enabled.
+  bool enable_language_recognition = 1;
+}
+
+// Configuration for speech recognition.
+message SpeechRecognitionConfig {
+  // The switch that enables speech recognition for the request.
+  // If disabled or unspecified, the related results are excluded.
+  // The service responds with the `FAILED_PRECONDITION` gRPC status code
+  // if requested but not enabled.
+  bool enable_speech_recognition = 1;
+
+  // The maximum number of alternative transcriptions allowed to be included
+  // per response.
+  // The actual count received can be less than the specified value and may
+  // also be equal to 0. If unspecified or 0, one alternative is allowed to be
+  // returned too.
+  uint32 recognition_alternatives_limit = 2;
+
+  // The switch that enables additional time alignment of recognitions in word
+  // details.
+  // If enabled, the `words` field of
+  // a [`SpeechRecognitionAlternative`](#SpeechRecognitionAlternative) message
+  // includes a list of [`SpeechRecognitionWord`](#SpeechRecognitionWord)
+  // messages. Otherwise, it remains empty.
+  // The service responds with the `FAILED_PRECONDITION` gRPC status code
+  // if requested but not enabled.
+  bool enable_time_alignment = 3;
+
+  // The name of a language group of models to be used.
+  // If left unspecified, it backs to the service's default group.
+  // The service responds with the `NOT_FOUND` gRPC status code
+  // if the name is not registered.
+  string language_group_name = 4;
+
+  // The name of a model to be used.
+  // If left unspecified, it backs to the selected langugage group's default.
+  // The service responds with the `NOT_FOUND` gRPC status code
+  // if the name is not registered.
+  string model_name = 5;
+
+  // Deprecated.
+  // The additional advanced service-dependend configuration for its speech
+  // recognizer. It may be silently ignored.
+  map<string, string> config_fields = 6;
+}
+
+// A message controlling the processing flow of
+// a [`StreamingRecognize`](#StreamingRecognize) request.
+message StreamingRecognizeRequestControlMessage {
+  reserved 2;
+
+  oneof control_message_content
+  {
+    // The flag that starts the input timer on demand and resets after each final
+    // result. It is silently ignored if the manual input timer setting is
+    // disabled for the request.
+    bool start_input_timer = 1;
+
+    // The flag to allow the service to return a response.
+    // After receiving this message, the service remains in the "give response"
+    // state. Ignored when the service is already in the "give response" state.
+    // Mutually exclusive with the `hold_response` field.
+    // New in v1p1.
+    bool give_response = 3;
+
+    // The flag to forbid the service from returning a response.
+    // After receiving this message, the service remains in the "hold response"
+    // state. Ignored when the service is already in the "hold response" state.
+    // Mutually exclusive with the `give_response` field.
+    // New in v1p1.
+    bool hold_response = 4;
+  }
+}
+
+// A message that carries data contents of
+// a [`StreamingRecognizeRequest`](#StreamingRecognizeRequest) request.
+message StreamingRecognizeRequestData {
+  // Part of the audio to perform recognition on.
+  Audio audio = 1;
+}
+
+// Audio contents.
+message Audio {
+  oneof audio_content {
+    // The audio data bytes.
+    bytes bytes = 1;
+  }
+}
+
+// A message streamed from the service through
+// the [`StreamingRecognize`](#StreamingRecognize) method.
+message StreamingRecognizeResponse {
+  // The combined recognition results for another part of the audio.
+  StreamingRecognizeResult result = 1;
+
+  // The cumulative duration of the processed audio during the request,
+  // not necessarily matching the actual length of the sent audio, mandatorily
+  // updated with each final result.
+  google.protobuf.Duration processed_audio_duration = 2;
+}
+
+// Combined recognition result.
+message StreamingRecognizeResult {
+  // The recognition process status.
+  // It may communicate warnings. In case of an error hindering recognition,
+  // all other message fields should be left unset.
+  techmo.api.Status error = 1;
+
+  // The flag indicating whether the result is interim or final.
+  bool is_final = 2;
+
+  // The anticipated causes for the service to finalize a result.
+  enum ResultFinalizationCause {
+    // The cause is not specified.
+    UNSPECIFIED = 0;
+
+    // The speech recognition result is not empty and the end of utterance
+    // is detected.
+    SUCCESS = 1;
+
+    // The speech recognition result is empty after the duration to expect
+    // a result is reached.
+    NO_INPUT_TIMEOUT = 2;
+
+    // The speech recognition result is not empty after the utterance duration
+    // limit is reached. The returned speech recognition is incomplete and
+    // should be completed in the following result.
+    SUCCESS_MAXTIME = 3;
+
+    // Unused.
+    PARTIAL_MATCH = 4;
+
+    // The speech recognition result is empty after the utterance duration
+    // limit is reached.
+    NO_MATCH_MAXTIME = 5;
+  }
+
+  // The field indicating the cause of result finalization.
+  // For interim results, the service should leave the field as `UNSPECIFIED`.
+  // For final results, the service must set the field to a value other than
+  // `UNSPECIFIED`.
+  ResultFinalizationCause result_finalization_cause = 3;
+
+  // The speech recognition result for another part of the processed audio,
+  // new with each final result, updates with each interim one.
+  // To obtain a complete result for all processed audio, for each final result
+  // received, a client should pick one of the result's recognition alternatives
+  // and buffer it on its own.
+  // It must be omitted if speech recognition is disabled.
+  SpeechRecognitionResult speech_recognition_result = 4;
+
+  // The current age recognition result for all processed audio,
+  // updated with each final result.
+  // It may be omitted in an interim result and must be omitted if age
+  // recognition is disabled.
+  AgeRecognitionResult age_recognition_result = 5;
+
+  // The current gender recognition result for all processed audio,
+  // updated with each final result.
+  // It may be omitted in an interim result and must be omitted if gender
+  // recognition is disabled.
+  GenderRecognitionResult gender_recognition_result = 6;
+
+  // The current language recognition result for all processed audio,
+  // updated with each final result.
+  // It may be omitted in an interim result and must be omitted if language
+  // recognition is disabled.
+  LanguageRecognitionResult language_recognition_result = 7;
+}
+
+// A result of age recognition.
+message AgeRecognitionResult {
+  // The recognition process status.
+  // It may communicate warnings. In case of an error hindering recognition,
+  // all other message fields should be left unset.
+  techmo.api.Status error = 1;
+
+  // The confidence-ordered list of alternative recognition hypotheses.
+  repeated AgeRecognitionAlternative recognition_alternatives = 2;
+}
+
+// An alternative hypothesis of age recognition.
+message AgeRecognitionAlternative {
+  // The assumed age of the person speaking in the audio, in years.
+  // For a reliable value, assure that there is only one person speaking in
+  // the audio.
+  uint32 age = 1;
+
+  // The confidence estimate, ranging from 0.0 to 1.0.
+  // Support for this feature is optional.
+  optional float confidence = 2;
+}
+
+// A result of gender recognition.
+message GenderRecognitionResult {
+  // The recognition process status.
+  // It may communicate warnings. In case of an error hindering recognition,
+  // all other message fields should be left unset.
+  techmo.api.Status error = 1;
+
+  // The confidence-ordered list of alternative recognition hypotheses.
+  repeated GenderRecognitionAlternative recognition_alternatives = 2;
+}
+
+// An alternative hypothesis of gender recognition.
+message GenderRecognitionAlternative {
+  // The assumed gender of the person speaking in the audio.
+  // For a reliable value, assure that there is only one person speaking in
+  // the audio.
+  string gender = 1;
+
+  // The confidence estimate, ranging from 0.0 to 1.0.
+  // Support for this feature is optional.
+  optional float confidence = 2;
+}
+
+// A result of language recognition.
+message LanguageRecognitionResult {
+  // The recognition process status.
+  // It may communicate warnings. In case of an error hindering recognition,
+  // all other message fields should be left unset.
+  techmo.api.Status error = 1;
+
+  // The confidence-ordered list of alternative recognition hypotheses.
+  repeated LanguageRecognitionAlternative recognition_alternatives = 2;
+}
+
+// An alternative hypothesis of language recognition.
+message LanguageRecognitionAlternative {
+  // The language spoken in the audio,
+  // a [BCP-47](https://www.rfc-editor.org/rfc/bcp/bcp47.txt) tag.
+  string language = 1;
+
+  // The confidence estimate, ranging from 0.0 to 1.0.
+  // Support for this feature is optional.
+  optional float confidence = 2;
+}
+
+// A result of speech recognition.
+message SpeechRecognitionResult {
+  // The recognition process status.
+  // It may communicate warnings. In case of an error hindering recognition,
+  // all other message fields should be left unset.
+  techmo.api.Status error = 1;
+
+  // The confidence-ordered list of alternative recognition hypotheses.
+  repeated SpeechRecognitionAlternative recognition_alternatives = 2;
+
+  // The actual name of the language group of the model,
+  // unrelated to the actual language spoken in the audio.
+  string language_group_name = 3;
+
+  // The actual name of the model used to obtain the result.
+  string model_name = 4;
+}
+
+// An alternative hypothesis of speech recognition.
+message SpeechRecognitionAlternative {
+  // The transcript of the audio.
+  string transcript = 1;
+
+  // The confidence estimate, ranging from 0.0 to 1.0.
+  // Support for this feature is optional.
+  optional float confidence = 2;
+
+  // The details of the transcript's words.
+  // Empty unless `enable_time_alignment` is `true` in the request's
+  // [`SpeechRecognitionConfig`](#SpeechRecognitionConfig).
+  repeated SpeechRecognitionWord words = 3;
+}
+
+// Details of a single word in speech recognition.
+message SpeechRecognitionWord {
+  // The transcript of the word itself.
+  string transcript = 1;
+
+  // The confidence estimate, ranging from 0.0 to 1.0.
+  // Support for this feature is optional.
+  optional float confidence = 2;
+
+  // The start time of the word relative to the beginning of the entire audio.
+  google.protobuf.Duration start_time = 3;
+
+  // The end time of the word relative to the beginning of the entire audio.
+  google.protobuf.Duration end_time = 4;
+}
