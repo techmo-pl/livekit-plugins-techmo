@@ -47,6 +47,9 @@ path = "hatch_build.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["livekit"]
+artifacts = [
+    "livekit/plugins/techmo/_proto/techmo/",
+]
 
 [tool.hatch.build.targets.sdist]
 include = ["livekit", "proto", "hatch_build.py"]
