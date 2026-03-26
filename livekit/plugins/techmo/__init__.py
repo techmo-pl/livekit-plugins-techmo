@@ -20,7 +20,7 @@ __pdoc__ = {
 
 class TechmoPlugin(Plugin):
     def __init__(self) -> None:
-        super().__init__(__name__, __version__, __package__)
+        super().__init__(__name__, __version__, __package__, logger=logger)
 
     def download_files(self) -> None:
         pass

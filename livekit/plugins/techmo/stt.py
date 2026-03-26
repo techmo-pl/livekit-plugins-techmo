@@ -14,7 +14,7 @@ import grpc.aio
 
 from livekit import rtc
 from livekit.agents import stt, utils
-from livekit.agents.types import NOT_GIVEN, NotGivenOr
+from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, APIConnectOptions, NotGivenOr
 
 from .log import logger
 from .version import __version__
@@ -72,6 +72,22 @@ class STTOptions:
     grpc_timeout: float | None = None
     """Overall gRPC deadline in seconds. None means no timeout."""
 
+    mrcp_no_input_timeout: int | None = None
+    """MRCP no-input-timeout in milliseconds. Finalizes recognition with NO_INPUT_TIMEOUT
+    if no speech is detected within this period. None uses the service default."""
+
+    mrcp_recognition_timeout: int | None = None
+    """MRCP recognition-timeout in milliseconds. Maximum total duration of an utterance.
+    None uses the service default."""
+
+    mrcp_speech_complete_timeout: int | None = None
+    """MRCP speech-complete-timeout in milliseconds. Silence duration after speech
+    that signals end of utterance when a match is expected. None uses the service default."""
+
+    mrcp_speech_incomplete_timeout: int | None = None
+    """MRCP speech-incomplete-timeout in milliseconds. Silence duration after speech
+    that signals end of utterance when no match is expected yet. None uses the service default."""
+
 
 class STT(stt.STT):
     """Techmo ASR speech-to-text provider for LiveKit Agents.
@@ -108,6 +124,10 @@ class STT(stt.STT):
         client_cert: bytes | None = None,
         client_key: bytes | None = None,
         grpc_timeout: float | None = None,
+        mrcp_no_input_timeout: int | None = None,
+        mrcp_recognition_timeout: int | None = None,
+        mrcp_speech_complete_timeout: int | None = None,
+        mrcp_speech_incomplete_timeout: int | None = None,
     ) -> None:
         super().__init__(
             capabilities=stt.STTCapabilities(
@@ -138,6 +158,10 @@ class STT(stt.STT):
             client_cert=client_cert,
             client_key=client_key,
             grpc_timeout=grpc_timeout,
+            mrcp_no_input_timeout=mrcp_no_input_timeout,
+            mrcp_recognition_timeout=mrcp_recognition_timeout,
+            mrcp_speech_complete_timeout=mrcp_speech_complete_timeout,
+            mrcp_speech_incomplete_timeout=mrcp_speech_incomplete_timeout,
         )
 
     def _make_channel(self) -> grpc.aio.Channel:
@@ -199,9 +223,11 @@ class STT(stt.STT):
         self,
         *,
         language: NotGivenOr[str] = NOT_GIVEN,
+        conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
+        **kwargs: object,
     ) -> "SpeechStream":
         """Return an async streaming speech recognition context."""
-        return SpeechStream(self, self._opts)
+        return SpeechStream(self, self._opts, conn_options=conn_options)
 
 
 class SpeechStream(stt.SpeechStream):
@@ -211,8 +237,8 @@ class SpeechStream(stt.SpeechStream):
     receives SpeechEvent objects out.
     """
 
-    def __init__(self, stt_instance: STT, opts: STTOptions) -> None:
-        super().__init__(stt_instance)
+    def __init__(self, stt_instance: STT, opts: STTOptions, *, conn_options: APIConnectOptions) -> None:
+        super().__init__(stt=stt_instance, conn_options=conn_options)
         self._opts = opts
         self._done = asyncio.Event()
 
@@ -241,18 +267,25 @@ class SpeechStream(stt.SpeechStream):
                 self._recv_loop(stub, _request_generator, send_queue)
             )
 
+            resampler: rtc.AudioResampler | None = None
+
             try:
                 async for input_item in self._input_ch:
                     if isinstance(input_item, self._FlushSentinel):
-                        # Flush: signal end of this utterance segment
-                        # For Techmo, we can close and re-open, or just continue
                         logger.debug("SpeechStream: flush received")
                     elif isinstance(input_item, rtc.AudioFrame):
-                        # Re-sample to target rate if needed
                         frame = input_item
-                        if frame.sample_rate != opts.sample_rate:
-                            frame = frame.remix_and_resample(opts.sample_rate, 1)
-                        await send_queue.put(frame.data.tobytes())
+                        if frame.sample_rate != opts.sample_rate or frame.num_channels != 1:
+                            if resampler is None or resampler._input_rate != frame.sample_rate:
+                                resampler = rtc.AudioResampler(
+                                    input_rate=frame.sample_rate,
+                                    output_rate=opts.sample_rate,
+                                    num_channels=1,
+                                )
+                            for resampled in resampler.push(frame):
+                                await send_queue.put(resampled.data.tobytes())
+                        else:
+                            await send_queue.put(frame.data.tobytes())
             finally:
                 await send_queue.put(None)  # Signal end of input
                 await recv_task
@@ -291,12 +324,14 @@ class SpeechStream(stt.SpeechStream):
                 duration = _proto_duration_to_seconds(response.processed_audio_duration)
 
                 if result.is_final:
+                    logger.debug("Received final transcript: '%s'", alts[0].text if alts else "")
                     event = stt.SpeechEvent(
                         type=stt.SpeechEventType.FINAL_TRANSCRIPT,
                         alternatives=alts,
                         recognition_usage=stt.RecognitionUsage(audio_duration=duration),
                     )
                 else:
+                    logger.debug("Received partial transcript: '%s'", alts[0].text if alts else "")
                     event = stt.SpeechEvent(
                         type=stt.SpeechEventType.INTERIM_TRANSCRIPT,
                         alternatives=alts,
@@ -351,6 +386,19 @@ def _build_config(opts: STTOptions) -> "_proto.StreamingRecognizeRequestConfig":
         speech_cfg_kwargs["language_group_name"] = opts.language_group
     if opts.model_name:
         speech_cfg_kwargs["model_name"] = opts.model_name
+
+    config_fields: dict[str, str] = {}
+    _MRCP_FIELDS = {
+        "no-input-timeout": opts.mrcp_no_input_timeout,
+        "recognition-timeout": opts.mrcp_recognition_timeout,
+        "speech-complete-timeout": opts.mrcp_speech_complete_timeout,
+        "speech-incomplete-timeout": opts.mrcp_speech_incomplete_timeout,
+    }
+    for key, value in _MRCP_FIELDS.items():
+        if value is not None:
+            config_fields[key] = str(value)
+    if config_fields:
+        speech_cfg_kwargs["config_fields"] = config_fields
 
     return _proto.StreamingRecognizeRequestConfig(  # type: ignore[name-defined]
         audio_config=_proto.AudioConfig(  # type: ignore[name-defined]

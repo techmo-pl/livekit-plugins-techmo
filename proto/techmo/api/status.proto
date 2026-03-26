@@ -1,20 +1,11 @@
-// Copyright 2023 Techmo sp. z o.o.
-
 syntax = "proto3";
-
 package techmo.api;
 
-import "google/protobuf/any.proto";
-
-
-//
+// Status communicates the result of a recognition request.
+// A non-zero code indicates an error.
 message Status {
-    //
-    int32 code = 1;
-
-    //
-    string message = 2;
-
-    //
-    repeated google.protobuf.Any details = 3;
+  // Status code; 0 means success.
+  int32 code = 1;
+  // Human-readable description of the status.
+  string message = 2;
 }

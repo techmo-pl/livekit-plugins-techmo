@@ -10,23 +10,18 @@
 - Word-level timestamps
 - TLS and mutual-TLS support
 - Multiple language groups / model selection
-- Works with LiveKit `VoicePipelineAgent`
+- MRCP timeout controls (no-input, recognition, speech-complete, speech-incomplete)
+- Compatible with LiveKit Agents >= 1.5
 
 ## Requirements
 
 - Python >= 3.10
-- `livekit-agents >= 1.0`
+- `livekit-agents >= 1.5`
 - `grpcio >= 1.63`
 - `protobuf >= 5.0`
 - Access to a running **Techmo ASR** gRPC server
 
 ## Installation
-
-### From PyPI (when published)
-
-```bash
-pip install livekit-plugins-techmo
-```
 
 ### From source
 
@@ -34,17 +29,23 @@ pip install livekit-plugins-techmo
 git clone https://github.com/techmo-pl/livekit-plugins-techmo
 cd livekit-plugins-techmo
 
-# Install build tools and generate gRPC stubs
-pip install grpcio-tools
-python hatch_build.py
+# Install build tools
+pip install grpcio-tools hatchling
 
-# Install in editable mode
-pip install -e ".[dev]"
+# Install the plugin (stubs are generated at build time)
+pip install --no-build-isolation .
 ```
 
-> **Note:** The gRPC Python stubs are generated at install time from the `.proto` files
-> in `proto/`. They are placed in `livekit/plugins/techmo/_proto/`.
-> Run `make proto` (or `python hatch_build.py`) any time you change the `.proto` files.
+> **Note:** The `--no-build-isolation` flag is required because the build hook generates
+> gRPC Python stubs from the `.proto` files in `proto/` at install time.
+> The stubs are placed in `livekit/plugins/techmo/_proto/`.
+
+To regenerate stubs manually after changing `.proto` files:
+
+```bash
+pip install grpcio-tools
+python hatch_build.py
+```
 
 ## Quick Start
 
@@ -83,28 +84,31 @@ stt = STT(
 )
 ```
 
-### Inside a LiveKit Agent
+### Inside a LiveKit Agent (v1.5+)
 
 ```python
-from livekit.agents import AutoSubscribe, JobContext, WorkerOptions, cli
-from livekit.agents.pipeline import VoicePipelineAgent
+from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions, WorkerOptions, cli
+from livekit.plugins import silero
 from livekit.plugins.techmo import STT
 
 async def entrypoint(ctx: JobContext) -> None:
-    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+    await ctx.connect()
 
-    agent = VoicePipelineAgent(
-        stt=STT(language_group="pl"),
+    session = AgentSession(
+        vad=silero.VAD.load(),
+        stt=STT(
+            language_group="pl",
+            interim_results=True,
+            mrcp_speech_complete_timeout=1000,
+        ),
         # llm=..., tts=...
     )
-    participant = await ctx.wait_for_participant()
-    agent.start(ctx.room, participant)
+
+    await session.start(room=ctx.room, agent=Agent(), room_input_options=RoomInputOptions())
 
 if __name__ == "__main__":
     cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
 ```
-
-See `examples/` for more complete examples.
 
 ## Configuration Reference
 
@@ -122,22 +126,43 @@ See `examples/` for more complete examples.
 | `ca_cert` | `bytes \| None` | `None` | PEM CA certificate for TLS |
 | `client_cert` | `bytes \| None` | `None` | PEM client certificate (mutual TLS) |
 | `client_key` | `bytes \| None` | `None` | PEM client private key (mutual TLS) |
-| `grpc_timeout` | `float \| None` | `None` | gRPC deadline in seconds |
+| `grpc_timeout` | `float \| None` | `None` | Overall gRPC deadline in seconds |
+| `mrcp_no_input_timeout` | `int \| None` | `None` | ms of silence before NO_INPUT_TIMEOUT (server default if unset) |
+| `mrcp_recognition_timeout` | `int \| None` | `None` | Maximum total utterance duration in ms (server default if unset) |
+| `mrcp_speech_complete_timeout` | `int \| None` | `None` | Silence after speech (match expected) in ms (server default if unset) |
+| `mrcp_speech_incomplete_timeout` | `int \| None` | `None` | Silence after speech (no match yet) in ms (server default if unset) |
+
+### MRCP Timeout Notes
+
+The four `mrcp_*` parameters map directly to MRCP speech recognition resource headers:
+
+- **`mrcp_no_input_timeout`** — how long to wait for the user to start speaking before giving up
+- **`mrcp_recognition_timeout`** — hard cap on total recognition time; set large (e.g. `600000`) for long utterances
+- **`mrcp_speech_complete_timeout`** — silence duration after speech that ends the utterance when a grammar match is possible; smaller values make recognition feel more responsive (e.g. `1000`)
+- **`mrcp_speech_incomplete_timeout`** — silence duration when no match is possible yet; typically larger than `speech_complete_timeout`
+
+## Logging
+
+The plugin uses the `livekit.plugins.techmo` logger. To see interim and final transcript events, enable `DEBUG` level logging. With LiveKit Agents this is done via the `LIVEKIT_LOG_LEVEL` environment variable:
+
+```bash
+LIVEKIT_LOG_LEVEL=DEBUG python my_agent.py dev
+```
 
 ## Development
 
 ```bash
 # Generate gRPC stubs
-make proto
+python hatch_build.py
 
 # Run linter
-make lint
+ruff check .
 
 # Run formatter
-make format
+ruff format .
 
 # Run unit tests (no server required)
-make test
+pytest tests/ -v
 
 # Run integration tests (requires TECHMO_ASR_ADDRESS)
 TECHMO_ASR_ADDRESS=localhost:5555 pytest tests/test_integration.py -v
