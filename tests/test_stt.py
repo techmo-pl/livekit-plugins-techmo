@@ -63,13 +63,13 @@ def test_sttoptions_custom() -> None:
 def test_stt_requires_address(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TECHMO_ASR_ADDRESS", raising=False)
     with pytest.raises(ValueError, match="service_address"):
-        # Importing STT triggers proto import; skip if stubs not generated
+        # Importing STT triggers the techmo-asr-api import; skip if it is missing
         try:
             from livekit.plugins.techmo.stt import STT
 
             STT()
         except ImportError:
-            pytest.skip("gRPC stubs not generated")
+            pytest.skip("gRPC stubs (techmo-asr-api) not installed")
 
 
 def test_stt_address_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -80,7 +80,7 @@ def test_stt_address_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
         stt = STT()
         assert stt._opts.service_address == "localhost:50051"
     except ImportError:
-        pytest.skip("gRPC stubs not generated")
+        pytest.skip("gRPC stubs (techmo-asr-api) not installed")
 
 
 def test_stt_capabilities() -> None:
@@ -110,7 +110,7 @@ def test_build_config_basic() -> None:
         assert cfg.result_config.enable_interim_results is True
         assert cfg.speech_recognition_config.enable_speech_recognition is True
     except ImportError:
-        pytest.skip("gRPC stubs not generated")
+        pytest.skip("gRPC stubs (techmo-asr-api) not installed")
 
 
 def test_build_config_with_model() -> None:
@@ -128,7 +128,7 @@ def test_build_config_with_model() -> None:
         assert cfg.speech_recognition_config.model_name == "asr-pl-v2"
         assert cfg.speech_recognition_config.recognition_alternatives_limit == 3
     except ImportError:
-        pytest.skip("gRPC stubs not generated")
+        pytest.skip("gRPC stubs (techmo-asr-api) not installed")
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +145,7 @@ def test_proto_duration_to_seconds() -> None:
         dur.nanos = 500_000_000
         assert _proto_duration_to_seconds(dur) == pytest.approx(2.5)
     except ImportError:
-        pytest.skip("gRPC stubs not generated")
+        pytest.skip("gRPC stubs (techmo-asr-api) not installed")
 
 
 # ---------------------------------------------------------------------------

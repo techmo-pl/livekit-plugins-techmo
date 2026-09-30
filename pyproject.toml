@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "grpcio-tools>=1.63.0"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
@@ -22,9 +22,11 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 dependencies = [
-    "livekit-agents>=1.0",
+    "livekit-agents>=1.0,<2.0",
     "grpcio>=1.63.0",
-    "protobuf>=5.0.0",
+    # techmo-asr-api ships stubs generated with protobuf 5.29 (older runtimes fail to import them)
+    "protobuf>=5.29.0",
+    "techmo-asr-api @ git+https://github.com/techmo-pl/asr-api-python.git@1.1.4",
 ]
 
 [project.urls]
@@ -39,20 +41,17 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.1.0",
     "mypy>=1.0",
-    "grpcio-tools>=1.63.0",
 ]
 
-[tool.hatch.build.hooks.custom]
-path = "hatch_build.py"
+[tool.hatch.metadata]
+# techmo-asr-api is not on PyPI yet, so it is referenced by git URL
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["livekit"]
-artifacts = [
-    "livekit/plugins/techmo/_proto/techmo/",
-]
 
 [tool.hatch.build.targets.sdist]
-include = ["livekit", "proto", "hatch_build.py"]
+include = ["livekit"]
 
 [tool.ruff]
 line-length = 120
