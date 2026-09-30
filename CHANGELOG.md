@@ -4,7 +4,7 @@ All notable changes to this project will be documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [0.2.0] - 2026-09-30
 
 ### Added
 - `session_id` option: sent as the `session-id` gRPC metadata header with streaming and
