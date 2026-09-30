@@ -16,9 +16,6 @@ venv/
 env/
 .env
 
-# Generated gRPC stubs (regenerate with: make proto)
-livekit/plugins/techmo/_proto/techmo/
-
 # IDEs
 .idea/
 .vscode/

@@ -20,12 +20,11 @@ from .log import logger
 from .version import __version__
 
 try:
-    from . import _proto  # type: ignore[attr-defined]
+    from asr_api import v1p1 as _proto
 except ImportError as e:
     raise ImportError(
-        "Techmo ASR gRPC stubs not found. "
-        "Run 'pip install grpcio-tools && python hatch_build.py' to generate them, "
-        "or reinstall the package: 'pip install livekit-plugins-techmo'"
+        "Techmo ASR gRPC stubs (techmo-asr-api) not found. Reinstall the plugin, or install them with: "
+        "pip install 'techmo-asr-api @ git+https://github.com/techmo-pl/asr-api-python.git@1.1.4'"
     ) from e
 
 

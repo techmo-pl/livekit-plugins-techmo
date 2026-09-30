@@ -18,34 +18,26 @@
 - Python >= 3.10
 - `livekit-agents >= 1.5`
 - `grpcio >= 1.63`
-- `protobuf >= 5.0`
+- `protobuf >= 5.29`
+- [`techmo-asr-api`](https://github.com/techmo-pl/asr-api-python) 1.1.4 (gRPC stubs; installed automatically)
 - Access to a running **Techmo ASR** gRPC server
 
 ## Installation
 
-### From source
+```bash
+pip install "livekit-plugins-techmo @ git+https://github.com/techmo-pl/livekit-plugins-techmo.git@<version-tag>"
+```
+
+or from a clone:
 
 ```bash
 git clone https://github.com/techmo-pl/livekit-plugins-techmo
 cd livekit-plugins-techmo
-
-# Install build tools
-pip install grpcio-tools hatchling
-
-# Install the plugin (stubs are generated at build time)
-pip install --no-build-isolation .
+pip install .
 ```
 
-> **Note:** The `--no-build-isolation` flag is required because the build hook generates
-> gRPC Python stubs from the `.proto` files in `proto/` at install time.
-> The stubs are placed in `livekit/plugins/techmo/_proto/`.
-
-To regenerate stubs manually after changing `.proto` files:
-
-```bash
-pip install grpcio-tools
-python hatch_build.py
-```
+The gRPC stubs come from the [`techmo-asr-api`](https://github.com/techmo-pl/asr-api-python)
+package (a dependency), so nothing is generated at install time.
 
 ## Quick Start
 
@@ -166,9 +158,6 @@ LIVEKIT_LOG_LEVEL=DEBUG python my_agent.py dev
 ## Development
 
 ```bash
-# Generate gRPC stubs
-python hatch_build.py
-
 # Run linter
 ruff check .
 
@@ -184,8 +173,8 @@ TECHMO_ASR_ADDRESS=localhost:5555 pytest tests/test_integration.py -v
 
 ## API Version
 
-This plugin uses the **Techmo ASR v1p1** gRPC API. The `.proto` definition is located at
-`proto/techmo/asr/api/v1p1/asr.proto`.
+This plugin uses the **Techmo ASR v1p1** gRPC API (`asr_api.v1p1` from
+[`techmo-asr-api`](https://github.com/techmo-pl/asr-api-python), which also holds the `.proto` definitions).
 
 ## License
 
