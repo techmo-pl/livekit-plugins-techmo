@@ -127,6 +127,7 @@ if __name__ == "__main__":
 | `client_cert` | `bytes \| None` | `None` | PEM client certificate (mutual TLS) |
 | `client_key` | `bytes \| None` | `None` | PEM client private key (mutual TLS) |
 | `grpc_timeout` | `float \| None` | `None` | Overall gRPC deadline in seconds |
+| `session_id` | `str \| None` | `None` | Session ID sent as `session-id` gRPC metadata (service generates one per request if unset) |
 | `mrcp_no_input_timeout` | `int \| None` | `None` | ms of silence before NO_INPUT_TIMEOUT (server default if unset) |
 | `mrcp_recognition_timeout` | `int \| None` | `None` | Maximum total utterance duration in ms (server default if unset) |
 | `mrcp_speech_complete_timeout` | `int \| None` | `None` | Silence after speech (match expected) in ms (server default if unset) |
@@ -140,6 +141,19 @@ The four `mrcp_*` parameters map directly to MRCP speech recognition resource he
 - **`mrcp_recognition_timeout`** — hard cap on total recognition time; set large (e.g. `600000`) for long utterances
 - **`mrcp_speech_complete_timeout`** — silence duration after speech that ends the utterance when a grammar match is possible; smaller values make recognition feel more responsive (e.g. `1000`)
 - **`mrcp_speech_incomplete_timeout`** — silence duration when no match is possible yet; typically larger than `speech_complete_timeout`
+
+### Session ID
+
+`session_id` is sent with every recognition request as the `session-id` gRPC metadata
+header (the same header `asr-client-python --session-id` uses). All requests carrying the
+same ID are treated by the service as one session, and service logs can be matched to the
+call. Inside an agent, the LiveKit room name or job ID is a natural choice:
+
+```python
+stt = STT(language_group="pl", session_id=ctx.room.name)
+```
+
+Only printable ASCII is allowed (a gRPC metadata restriction); an empty string is treated as unset.
 
 ## Logging
 

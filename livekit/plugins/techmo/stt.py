@@ -72,6 +72,12 @@ class STTOptions:
     grpc_timeout: float | None = None
     """Overall gRPC deadline in seconds. None means no timeout."""
 
+    session_id: str | None = None
+    """Session ID sent with every request as the ``session-id`` gRPC metadata header.
+    Requests sharing an ID are treated by the service as parts of one session, which
+    also lets service logs be correlated with the call. None lets the service
+    generate an ID for each request."""
+
     mrcp_no_input_timeout: int | None = None
     """MRCP no-input-timeout in milliseconds. Finalizes recognition with NO_INPUT_TIMEOUT
     if no speech is detected within this period. None uses the service default."""
@@ -106,6 +112,8 @@ class STT(stt.STT):
             tls=True,
             ca_cert=open("ca.crt", "rb").read(),
         )
+        # or with a session ID, e.g. to correlate service logs with a LiveKit room:
+        stt_engine = STT(service_address="asr.example.com:50051", session_id=ctx.room.name)
     """
 
     def __init__(
@@ -124,6 +132,7 @@ class STT(stt.STT):
         client_cert: bytes | None = None,
         client_key: bytes | None = None,
         grpc_timeout: float | None = None,
+        session_id: str | None = None,
         mrcp_no_input_timeout: int | None = None,
         mrcp_recognition_timeout: int | None = None,
         mrcp_speech_complete_timeout: int | None = None,
@@ -158,6 +167,7 @@ class STT(stt.STT):
             client_cert=client_cert,
             client_key=client_key,
             grpc_timeout=grpc_timeout,
+            session_id=_validate_session_id(session_id),
             mrcp_no_input_timeout=mrcp_no_input_timeout,
             mrcp_recognition_timeout=mrcp_recognition_timeout,
             mrcp_speech_complete_timeout=mrcp_speech_complete_timeout,
@@ -205,6 +215,7 @@ class STT(stt.STT):
                 async for response in stub.StreamingRecognize(
                     _requests(),
                     timeout=self._opts.grpc_timeout,
+                    metadata=_build_metadata(self._opts),
                 ):
                     if response.HasField("result") and response.result.is_final:
                         duration = _proto_duration_to_seconds(response.processed_audio_duration)  # type: ignore[name-defined]
@@ -300,6 +311,7 @@ class SpeechStream(stt.SpeechStream):
             async for response in stub.StreamingRecognize(  # type: ignore[union-attr]
                 request_gen_factory(),
                 timeout=self._opts.grpc_timeout,
+                metadata=_build_metadata(self._opts),
             ):
                 if not response.HasField("result"):
                     continue
@@ -373,6 +385,27 @@ class stt_instance_channel:
     async def __aexit__(self, *_: object) -> None:
         if self._channel:
             await self._channel.close()
+
+
+_SESSION_ID_METADATA_KEY = "session-id"
+"""gRPC metadata key the Techmo ASR service reads the session ID from (same as asr-client-python)."""
+
+
+def _validate_session_id(session_id: str | None) -> str | None:
+    """Normalise and validate a session ID; an empty string means 'not set'."""
+    if not session_id:
+        return None
+    # gRPC ASCII metadata values must consist of printable ASCII characters only
+    if not all(" " <= ch <= "~" for ch in session_id):
+        raise ValueError(f"session_id must contain printable ASCII characters only, got {session_id!r}")
+    return session_id
+
+
+def _build_metadata(opts: STTOptions) -> tuple[tuple[str, str], ...] | None:
+    """Build the gRPC call metadata from plugin options."""
+    if not opts.session_id:
+        return None
+    return ((_SESSION_ID_METADATA_KEY, opts.session_id),)
 
 
 def _build_config(opts: STTOptions) -> "_proto.StreamingRecognizeRequestConfig":  # type: ignore[name-defined]

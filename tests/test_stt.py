@@ -146,3 +146,94 @@ def test_proto_duration_to_seconds() -> None:
         assert _proto_duration_to_seconds(dur) == pytest.approx(2.5)
     except ImportError:
         pytest.skip("gRPC stubs not generated")
+
+
+# ---------------------------------------------------------------------------
+# session_id (gRPC metadata)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def stt_module():  # type: ignore[no-untyped-def]
+    try:
+        from livekit.plugins.techmo import stt as stt_module
+    except ImportError:
+        pytest.skip("livekit-agents or gRPC stubs not installed")
+    return stt_module
+
+
+class _RecordingStub:
+    """Stand-in for AsrStub: records call kwargs and returns an empty response stream."""
+
+    calls: list[dict[str, object]] = []
+
+    def __init__(self, channel: object) -> None:
+        pass
+
+    def StreamingRecognize(self, requests: object, **kwargs: object) -> object:  # noqa: N802
+        _RecordingStub.calls.append(kwargs)
+
+        async def _responses():  # type: ignore[no-untyped-def]
+            return
+            yield
+
+        return _responses()
+
+
+@pytest.fixture
+def recording_stub(stt_module, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
+    _RecordingStub.calls = []
+    monkeypatch.setattr(stt_module._proto, "AsrStub", _RecordingStub)
+    return _RecordingStub
+
+
+def test_sttoptions_session_id_default_none(stt_module) -> None:  # type: ignore[no-untyped-def]
+    opts = stt_module.STTOptions(service_address="localhost:50051")
+    assert opts.session_id is None
+    assert stt_module._build_metadata(opts) is None
+
+
+def test_build_metadata_with_session_id(stt_module) -> None:  # type: ignore[no-untyped-def]
+    opts = stt_module.STTOptions(service_address="localhost:50051", session_id="room-42")
+    assert stt_module._build_metadata(opts) == (("session-id", "room-42"),)
+
+
+def test_stt_session_id_empty_means_unset(stt_module) -> None:  # type: ignore[no-untyped-def]
+    instance = stt_module.STT(service_address="localhost:50051", session_id="")
+    assert instance._opts.session_id is None
+
+
+@pytest.mark.parametrize("bad", ["zażółć", "line\nbreak", "tab\there"])
+def test_stt_session_id_rejects_non_printable_ascii(stt_module, bad: str) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(ValueError, match="session_id"):
+        stt_module.STT(service_address="localhost:50051", session_id=bad)
+
+
+@pytest.mark.parametrize(("session_id", "expected"), [("room-42", (("session-id", "room-42"),)), (None, None)])
+async def test_stream_sends_session_id_metadata(stt_module, recording_stub, session_id, expected) -> None:  # type: ignore[no-untyped-def]
+    instance = stt_module.STT(service_address="localhost:50051", session_id=session_id)
+    stream = instance.stream()
+    stream.end_input()
+
+    async def _drain() -> None:
+        async for _ in stream:
+            pass
+
+    await asyncio.wait_for(_drain(), timeout=5)
+    await stream.aclose()
+
+    assert len(recording_stub.calls) == 1
+    assert recording_stub.calls[0]["metadata"] == expected
+
+
+@pytest.mark.parametrize(("session_id", "expected"), [("room-42", (("session-id", "room-42"),)), (None, None)])
+async def test_recognize_sends_session_id_metadata(stt_module, recording_stub, session_id, expected) -> None:  # type: ignore[no-untyped-def]
+    from livekit import rtc
+
+    instance = stt_module.STT(service_address="localhost:50051", session_id=session_id)
+    frame = rtc.AudioFrame(_make_audio_bytes(), sample_rate=16000, num_channels=1, samples_per_channel=1600)
+
+    await instance._recognize_impl([frame])
+
+    assert len(recording_stub.calls) == 1
+    assert recording_stub.calls[0]["metadata"] == expected
