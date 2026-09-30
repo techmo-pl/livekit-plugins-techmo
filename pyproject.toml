@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "livekit-plugins-techmo"
-version = "0.1.0"
+version = "0.2.0"
 description = "LiveKit Agents plugin for Techmo ASR speech-to-text service"
 readme = "README.md"
 license = { text = "Apache-2.0" }
