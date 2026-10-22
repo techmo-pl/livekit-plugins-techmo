@@ -180,15 +180,17 @@ class STT(stt.STT):
             return grpc.aio.secure_channel(opts.service_address, credentials)
         return grpc.aio.insecure_channel(opts.service_address)
 
-    async def _recognize_impl(  # type: ignore[override]
+    async def _recognize_impl(
         self,
         buffer: utils.AudioBuffer,
         *,
         language: NotGivenOr[str] = NOT_GIVEN,
+        conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
     ) -> stt.SpeechEvent:
         """Perform batch (non-streaming) recognition on a complete audio buffer."""
         config = _build_config(self._opts)
-        audio_bytes = b"".join(frame.data.tobytes() for frame in buffer)  # type: ignore[union-attr]
+        frames = [buffer] if isinstance(buffer, rtc.AudioFrame) else buffer
+        audio_bytes = b"".join(frame.data.tobytes() for frame in frames)
 
         async with self._make_channel() as channel:
             stub = _proto.AsrStub(channel)

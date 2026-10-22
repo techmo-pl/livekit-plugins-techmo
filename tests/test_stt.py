@@ -238,3 +238,16 @@ async def test_recognize_sends_session_id_metadata(stt_module, recording_stub, s
 
     assert len(recording_stub.calls) == 1
     assert recording_stub.calls[0]["metadata"] == expected
+
+
+async def test_recognize_public_api_single_frame(stt_module, recording_stub) -> None:  # type: ignore[no-untyped-def]
+    # STT.recognize() passes conn_options to _recognize_impl, and a buffer may be a single AudioFrame
+    from livekit import rtc
+
+    instance = stt_module.STT(service_address="localhost:50051")
+    frame = rtc.AudioFrame(_make_audio_bytes(), sample_rate=16000, num_channels=1, samples_per_channel=1600)
+
+    event = await instance.recognize(frame)
+
+    assert len(recording_stub.calls) == 1
+    assert event.type == stt_module.stt.SpeechEventType.FINAL_TRANSCRIPT
