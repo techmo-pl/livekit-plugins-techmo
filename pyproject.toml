@@ -23,7 +23,8 @@ classifiers = [
 ]
 dependencies = [
     "livekit-agents>=1.0,<2.0",
-    "grpcio>=1.63.0",
+    # techmo-asr-api stubs embed GRPC_GENERATED_VERSION 1.70.0 (older grpcio raises on import)
+    "grpcio>=1.70.0",
     # techmo-asr-api ships stubs generated with protobuf 5.29 (older runtimes fail to import them)
     "protobuf>=5.29.0",
     "techmo-asr-api @ git+https://github.com/techmo-pl/asr-api-python.git@1.1.4",

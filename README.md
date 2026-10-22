@@ -11,13 +11,13 @@
 - TLS and mutual-TLS support
 - Multiple language groups / model selection
 - MRCP timeout controls (no-input, recognition, speech-complete, speech-incomplete)
-- Compatible with LiveKit Agents >= 1.5
+- Compatible with LiveKit Agents 1.x
 
 ## Requirements
 
 - Python >= 3.10
-- `livekit-agents >= 1.5`
-- `grpcio >= 1.63`
+- `livekit-agents >= 1.0, < 2.0` (tested with 1.5.1 and 1.8.3)
+- `grpcio >= 1.70`
 - `protobuf >= 5.29`
 - [`techmo-asr-api`](https://github.com/techmo-pl/asr-api-python) 1.1.4 (gRPC stubs; installed automatically)
 - Access to a running **Techmo ASR** gRPC server

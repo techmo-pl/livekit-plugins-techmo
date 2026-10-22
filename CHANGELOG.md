@@ -15,8 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - gRPC stubs now come from the `techmo-asr-api` package (1.1.4) instead of being generated
   from `proto/` at build time; `hatch_build.py`, `proto/` and the `grpcio-tools` build
   dependency are removed, and `--no-build-isolation` is no longer needed
-- Dependencies: `protobuf>=5.29.0` (required by the `techmo-asr-api` stubs),
-  `livekit-agents<2.0`
+- Dependencies: `protobuf>=5.29.0` and `grpcio>=1.70.0` (required by the `techmo-asr-api`
+  stubs), `livekit-agents<2.0`
+- CI now runs on pushes and pull requests to `master` (it targeted a non-existent `main`)
+- README requirements aligned with the package metadata
 
 ## [0.2.0] - 2026-09-30
 
