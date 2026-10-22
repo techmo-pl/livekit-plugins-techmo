@@ -4,12 +4,14 @@ All notable changes to this project will be documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [0.3.0] - 2026-10-22
 
 ### Fixed
 - Fresh installs failing on import with `VersionError` (protobuf gencode newer than runtime):
   the build hook generated stubs with whatever `grpcio-tools` was newest, independent of the
   protobuf runtime in the environment
+- `STT.recognize()` (batch recognition) raising `TypeError`: `_recognize_impl` did not accept
+  the `conn_options` argument passed by livekit-agents, and failed on a single `AudioFrame`
 - Editable installs (`pip install -e .`) shadowing `livekit.agents`: the empty
   `livekit/__init__.py` and `livekit/plugins/__init__.py` turned the shared namespace into a
   regular package; they are removed
