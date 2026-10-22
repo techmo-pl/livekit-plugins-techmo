@@ -10,6 +10,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Fresh installs failing on import with `VersionError` (protobuf gencode newer than runtime):
   the build hook generated stubs with whatever `grpcio-tools` was newest, independent of the
   protobuf runtime in the environment
+- `STT.recognize()` (batch recognition) raising `TypeError`: `_recognize_impl` did not accept
+  the `conn_options` argument passed by livekit-agents, and failed on a single `AudioFrame`
+- Editable installs (`pip install -e .`) shadowing `livekit.agents`: the empty
+  `livekit/__init__.py` and `livekit/plugins/__init__.py` turned the shared namespace into a
+  regular package; they are removed
 
 ### Changed
 - gRPC stubs now come from the `techmo-asr-api` package (1.1.4) instead of being generated
@@ -19,6 +24,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   stubs), `livekit-agents<2.0`
 - CI now runs on pushes and pull requests to `master` (it targeted a non-existent `main`)
 - README requirements aligned with the package metadata
+- Lint, format and mypy issues fixed so the CI passes; mypy no longer pins `python_version`
 
 ## [0.2.0] - 2026-09-30
 

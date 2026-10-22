@@ -28,6 +28,7 @@ async def test_streaming_silence() -> None:
     """Send silence and expect either empty results or graceful handling."""
     try:
         from livekit import rtc
+
         from livekit.plugins.techmo.stt import STT
     except ImportError:
         pytest.skip("livekit-agents or gRPC stubs not installed")

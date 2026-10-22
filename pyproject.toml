@@ -61,8 +61,13 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
 
+[tool.ruff.lint.isort]
+# livekit/ is a namespace package shared with livekit-agents and livekit-rtc
+known-third-party = ["livekit"]
+known-first-party = ["livekit.plugins.techmo"]
+
 [tool.mypy]
-python_version = "3.10"
+# no python_version pin: dependency stubs (e.g. numpy) use syntax of the running interpreter
 strict = false
 ignore_missing_imports = true
 

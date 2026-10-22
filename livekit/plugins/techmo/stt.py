@@ -3,21 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import os
-import time
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from typing import AsyncIterator
+from typing import Any
 
 import grpc
 import grpc.aio
-
 from livekit import rtc
 from livekit.agents import stt, utils
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, APIConnectOptions, NotGivenOr
 
 from .log import logger
-from .version import __version__
 
 try:
     from asr_api import v1p1 as _proto
@@ -148,8 +145,7 @@ class STT(stt.STT):
             service_address = os.environ.get("TECHMO_ASR_ADDRESS")
         if not service_address:
             raise ValueError(
-                "service_address is required. "
-                "Pass it directly or set the TECHMO_ASR_ADDRESS environment variable."
+                "service_address is required. Pass it directly or set the TECHMO_ASR_ADDRESS environment variable."
             )
 
         self._opts = STTOptions(
@@ -189,12 +185,12 @@ class STT(stt.STT):
         buffer: utils.AudioBuffer,
         *,
         language: NotGivenOr[str] = NOT_GIVEN,
+        conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
     ) -> stt.SpeechEvent:
         """Perform batch (non-streaming) recognition on a complete audio buffer."""
         config = _build_config(self._opts)
-        audio_bytes = b"".join(
-            frame.data.tobytes() for frame in buffer
-        )
+        frames = [buffer] if isinstance(buffer, rtc.AudioFrame) else buffer
+        audio_bytes = b"".join(frame.data.tobytes() for frame in frames)
 
         async with self._make_channel() as channel:
             stub = _proto.AsrStub(channel)
@@ -225,7 +221,7 @@ class STT(stt.STT):
 
         return stt.SpeechEvent(
             type=stt.SpeechEventType.FINAL_TRANSCRIPT,
-            alternatives=alternatives or [stt.SpeechData(language="", text="")],
+            alternatives=alternatives or [stt.SpeechData(language="", text="")],  # type: ignore[arg-type]
             recognition_usage=stt.RecognitionUsage(audio_duration=duration),
         )
 
@@ -235,7 +231,7 @@ class STT(stt.STT):
         language: NotGivenOr[str] = NOT_GIVEN,
         conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
         **kwargs: object,
-    ) -> "SpeechStream":
+    ) -> SpeechStream:
         """Return an async streaming speech recognition context."""
         return SpeechStream(self, self._opts, conn_options=conn_options)
 
@@ -273,9 +269,7 @@ class SpeechStream(stt.SpeechStream):
                         )
                     )
 
-            recv_task = asyncio.ensure_future(
-                self._recv_loop(stub, _request_generator, send_queue)
-            )
+            recv_task = asyncio.ensure_future(self._recv_loop(stub, _request_generator, send_queue))
 
             resampler: rtc.AudioResampler | None = None
 
@@ -302,12 +296,12 @@ class SpeechStream(stt.SpeechStream):
 
     async def _recv_loop(
         self,
-        stub: object,
-        request_gen_factory: object,
+        stub: Any,
+        request_gen_factory: Callable[[], AsyncIterator[Any]],
         send_queue: asyncio.Queue[bytes | None],
     ) -> None:
         try:
-            async for response in stub.StreamingRecognize(  # type: ignore[union-attr]
+            async for response in stub.StreamingRecognize(
                 request_gen_factory(),
                 timeout=self._opts.grpc_timeout,
                 metadata=_build_metadata(self._opts),
@@ -407,7 +401,7 @@ def _build_metadata(opts: STTOptions) -> tuple[tuple[str, str], ...] | None:
     return ((_SESSION_ID_METADATA_KEY, opts.session_id),)
 
 
-def _build_config(opts: STTOptions) -> "_proto.StreamingRecognizeRequestConfig":  # type: ignore[name-defined]
+def _build_config(opts: STTOptions) -> _proto.StreamingRecognizeRequestConfig:  # type: ignore[name-defined]
     """Build the initial gRPC config message from plugin options."""
     speech_cfg_kwargs: dict[str, object] = {
         "enable_speech_recognition": True,
@@ -459,7 +453,7 @@ def _parse_alternatives(result: object) -> list[stt.SpeechData]:
         if not text:
             continue
         confidence = alt.confidence if alt.HasField("confidence") else 0.0
-        alts.append(stt.SpeechData(language="", text=text, confidence=confidence))
+        alts.append(stt.SpeechData(language="", text=text, confidence=confidence))  # type: ignore[arg-type]
 
     return alts
 
