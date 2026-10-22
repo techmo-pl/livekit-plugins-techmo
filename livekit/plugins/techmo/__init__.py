@@ -3,7 +3,7 @@
 from livekit.agents import Plugin
 
 from .log import logger
-from .stt import STT, STTOptions, SpeechStream
+from .stt import STT, SpeechStream, STTOptions
 from .version import __version__
 
 __all__ = [

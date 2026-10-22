@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import struct
 import sys
 import wave
 
@@ -34,11 +33,10 @@ def read_wav_pcm(path: str) -> tuple[bytes, int]:
 async def transcribe_file(wav_path: str) -> None:
     try:
         from livekit import rtc
+
         from livekit.plugins.techmo.stt import STT
     except ImportError as e:
-        raise SystemExit(
-            "Install dependencies first: pip install livekit-plugins-techmo livekit-rtc"
-        ) from e
+        raise SystemExit("Install dependencies first: pip install livekit-plugins-techmo livekit-rtc") from e
 
     address = os.environ.get("TECHMO_ASR_ADDRESS", "localhost:5555")
     pcm, sample_rate = read_wav_pcm(wav_path)

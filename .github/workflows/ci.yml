@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, develop]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   lint-and-test:
@@ -27,12 +27,6 @@ jobs:
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
-
-      - name: Install build tools
-        run: pip install hatchling grpcio-tools
-
-      - name: Generate gRPC stubs
-        run: python hatch_build.py
 
       - name: Install package with dev dependencies
         run: pip install -e ".[dev]"
@@ -62,7 +56,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install build tools
-        run: pip install build hatchling grpcio-tools
+        run: pip install build hatchling
 
       - name: Build wheel and sdist
         run: python -m build

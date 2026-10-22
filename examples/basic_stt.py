@@ -20,9 +20,9 @@ from livekit.agents import (
     JobContext,
     WorkerOptions,
     cli,
-    llm,
 )
 from livekit.agents.pipeline import VoicePipelineAgent
+
 from livekit.plugins.techmo import STT
 
 logger = logging.getLogger("techmo-example")
@@ -35,7 +35,7 @@ async def entrypoint(ctx: JobContext) -> None:
     # service_address can also be read from TECHMO_ASR_ADDRESS env var
     stt_engine = STT(
         service_address=os.environ.get("TECHMO_ASR_ADDRESS", "localhost:5555"),
-        language_group="pl",       # Polish language group — adjust as needed
+        language_group="pl",  # Polish language group — adjust as needed
         interim_results=True,
         sample_rate=16000,
     )
