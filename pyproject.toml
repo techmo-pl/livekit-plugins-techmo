@@ -5,12 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "livekit-plugins-techmo"
 version = "0.3.0"
-description = "LiveKit Agents plugin for Techmo ASR speech-to-text service"
+description = "LiveKit Agents plugin for Techmo ASR speech-to-text and Techmo TTS text-to-speech services"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Techmo", email = "contact@techmo.pl" }]
 requires-python = ">=3.10"
-keywords = ["voice", "AI", "realtime", "audio", "livekit", "asr", "speech", "techmo"]
+keywords = ["voice", "AI", "realtime", "audio", "livekit", "asr", "tts", "speech", "techmo"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -22,12 +22,15 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 dependencies = [
-    "livekit-agents>=1.0,<2.0",
+    # >=1.2: the TTS sentence tokenizer (tokenize.blingfire) is missing in 1.0
+    "livekit-agents>=1.2,<2.0",
     # techmo-asr-api stubs embed GRPC_GENERATED_VERSION 1.70.0 (older grpcio raises on import)
     "grpcio>=1.70.0",
     # techmo-asr-api ships stubs generated with protobuf 5.29 (older runtimes fail to import them)
     "protobuf>=5.29.0",
     "techmo-asr-api @ git+https://github.com/techmo-pl/asr-api-python.git@1.1.4",
+    # tts-api stubs: same grpcio/protobuf floors as techmo-asr-api (generated with 1.70 / 5.29)
+    "tts-api @ git+https://github.com/techmo-pl/tts-api-python.git@v3.2.1",
 ]
 
 [project.urls]
@@ -45,7 +48,7 @@ dev = [
 ]
 
 [tool.hatch.metadata]
-# techmo-asr-api is not on PyPI yet, so it is referenced by git URL
+# techmo-asr-api and tts-api are not on PyPI yet, so they are referenced by git URL
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]

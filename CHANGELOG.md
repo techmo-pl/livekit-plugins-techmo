@@ -4,6 +4,24 @@ All notable changes to this project will be documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Added
+- `TTS`: Techmo TTS text-to-speech (gRPC API v3, stubs from `tts-api` 3.2.1), importable as
+  `livekit.plugins.techmo.TTS` or `livekit.plugins.techmo.tts.TTS`. Native streaming synthesis
+  (`TTS.stream()`, sentence by sentence) and chunked synthesis (`TTS.synthesize()`); voice,
+  language and prosody options with `update_options()`; `list_voices()`; SSML `<mark/>` markers
+  as `MarkerEvent` (`on_marker` callback); TLS / mutual TLS from bytes or file paths; gRPC
+  channel pool with lifetime rotation, `prewarm()` and reconnect on transient `UNAVAILABLE`;
+  `session_id` sent as `session_id` gRPC metadata. Ported from the internal Techmo plugin
+  `livekit-plugins-techmo-tts` 0.3.2
+- `KNOWN_ISSUES.md`: limitations of older Techmo TTS service versions and their workarounds
+- `examples/voice_agent.py`: voice agent with Techmo ASR + Techmo TTS
+- CI job testing the lowest supported `livekit-agents` (1.2.0)
+
+### Changed
+- Dependencies: `livekit-agents>=1.2` (1.0/1.1 lack the sentence tokenizer TTS uses), `tts-api`
+
 ## [0.3.0] - 2026-10-22
 
 ### Fixed
