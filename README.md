@@ -190,8 +190,8 @@ Or set the defaults via environment variables and omit them:
 
 ```bash
 export TECHMO_TTS_ADDRESS=tts.example.com:5555
-export TECHMO_TTS_VOICE=ewa          # default: michal
-export TECHMO_TTS_LANGUAGE=pl-PL     # default: pl-PL
+export TECHMO_TTS_VOICE=ewa          # unset: the service's default voice
+export TECHMO_TTS_LANGUAGE=pl-PL     # unset: the service's default language
 ```
 
 ```python
@@ -209,9 +209,9 @@ piece of text. `livekit.plugins.techmo.tts` is also importable as a module
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `service_address` | `str \| None` | `TECHMO_TTS_ADDRESS` env | gRPC server address (`host:port`) |
-| `voice_name` | `str \| None` | `TECHMO_TTS_VOICE` env, else `"michal"` | Voice name (e.g. `"michal"`, `"ewa"`) |
+| `voice_name` | `str \| None` | `TECHMO_TTS_VOICE` env, else `None` | Voice name (e.g. `"michal"`, `"ewa"`; case-sensitive). `None` = the service's default voice |
 | `voice_variant` | `int` | `1` | Voice variant index (1-based) |
-| `language_code` | `str \| None` | `TECHMO_TTS_LANGUAGE` env, else `"pl-PL"` | BCP-47 language code |
+| `language_code` | `str \| None` | `TECHMO_TTS_LANGUAGE` env, else `None` | BCP-47 language code. `None` = the service's default language |
 | `model` | `str` | `"standard"` | Model/backend identifier, reported to framework telemetry |
 | `pitch` | `float` | `1.0` | Pitch multiplier |
 | `speech_range` | `float` | `1.0` | Pitch range multiplier |
@@ -233,6 +233,17 @@ piece of text. `livekit.plugins.techmo.tts` is also importable as a module
 
 `update_options()` changes voice, language, prosody, `model` and `grpc_timeout` of an existing
 instance; `list_voices()` returns the voices the service offers (`VoiceInfo`).
+
+#### Voice selection
+
+Without `voice_name` (and `TECHMO_TTS_VOICE`) the plugin sends an empty voice name, and the
+service uses the default voice it is configured with; the same goes for `language_code`.
+`list_voices()` returns the names a service offers.
+
+Voice names are case-sensitive (`Masza` and `masza` can be two different voices), and the
+service does **not** reject an unknown name: it silently falls back to its default voice.
+`prewarm()` therefore checks `voice_name` against `list_voices()` and logs a warning, with
+case-insensitive matches as suggestions, if the service does not offer it.
 
 #### Prosody
 

@@ -99,14 +99,16 @@ class TTSOptions:
     """Model/backend identifier (e.g. 'standard'). Returned by the ``model`` property
     for framework telemetry — separate from ``voice_name``."""
 
-    voice_name: str = "michal"
-    """Name of the TTS voice to use (e.g. 'michal', 'ewa')."""
+    voice_name: str | None = None
+    """Name of the TTS voice to use (e.g. 'michal', 'ewa'; case-sensitive). ``None`` = the
+    service's configured default voice (an empty name is ignored in voice selection)."""
 
     voice_variant: int = 1
     """Voice variant index (1-based)."""
 
-    language_code: str = "pl-PL"
-    """BCP-47 language code for synthesis (e.g. 'pl-PL', 'en-US')."""
+    language_code: str | None = None
+    """BCP-47 language code for synthesis (e.g. 'pl-PL', 'en-US'). ``None`` = the service's
+    default language. It also takes part in voice selection when ``voice_name`` is unset."""
 
     pitch: float = 1.0
     """Prosodic pitch multiplier (1.0 = default)."""
@@ -313,10 +315,11 @@ class TTS(tts.TTS):  # type: ignore[misc, type-arg]
             )
 
         # --- Resolve optional fields from environment variables ---
+        # unset/empty -> None: the service picks its configured default voice / language
         if voice_name is None:
-            voice_name = os.environ.get("TECHMO_TTS_VOICE", "michal")
+            voice_name = os.environ.get("TECHMO_TTS_VOICE") or None
         if language_code is None:
-            language_code = os.environ.get("TECHMO_TTS_LANGUAGE", "pl-PL")
+            language_code = os.environ.get("TECHMO_TTS_LANGUAGE") or None
 
         # --- Resolve cert file paths to bytes (bytes args take precedence) ---
         if ca_cert is None and ca_cert_file is not None:
@@ -445,28 +448,55 @@ class TTS(tts.TTS):  # type: ignore[misc, type-arg]
 
     async def _prewarm_async(self, done_event: asyncio.Event) -> None:
         try:
-            await self._pool.acquire()
-            if self._opts.output_sample_rate:
+            try:
+                await self._pool.acquire()
                 # An explicit output rate was requested — the service resamples to it
                 # (>= 3.2.4), so a differing native rate is expected and not a warning.
-                return
-            discovered = await asyncio.to_thread(_discover_sample_rate, self._opts)
-            if discovered != self.sample_rate:
+                if not self._opts.output_sample_rate:
+                    discovered = await asyncio.to_thread(_discover_sample_rate, self._opts)
+                    if discovered != self.sample_rate:
+                        logger.warning(
+                            "Techmo TTS service reports %d Hz; plugin configured for %d Hz. "
+                            "Pass fallback_sample_rate=%d to TTS() to suppress this warning.",
+                            discovered,
+                            self.sample_rate,
+                            discovered,
+                        )
+            except Exception as exc:
                 logger.warning(
-                    "Techmo TTS service reports %d Hz; plugin configured for %d Hz. "
-                    "Pass fallback_sample_rate=%d to TTS() to suppress this warning.",
-                    discovered,
+                    "Techmo TTS prewarm failed (%s); continuing with fallback %d Hz",
+                    exc,
                     self.sample_rate,
-                    discovered,
                 )
-        except Exception as exc:
-            logger.warning(
-                "Techmo TTS prewarm failed (%s); continuing with fallback %d Hz",
-                exc,
-                self.sample_rate,
-            )
+                return
+            await self._warn_if_unknown_voice()
         finally:
             done_event.set()
+
+    async def _warn_if_unknown_voice(self) -> None:
+        """Warn when voice_name is not offered by the service.
+
+        The service does not reject an unknown name: it silently falls back to its
+        default voice, so a typo (or wrong case) would go unnoticed otherwise.
+        """
+        name = self._opts.voice_name
+        if not name:
+            return
+        try:
+            available = [v.name for v in await self.list_voices()]
+        except Exception as exc:
+            logger.debug("Techmo TTS voice check skipped: %s", exc)
+            return
+        if not available or name in available:
+            return
+        similar = sorted(v for v in available if v.lower() == name.lower())
+        hint = f"; did you mean one of: {', '.join(similar)}" if similar else ""
+        logger.warning(
+            "Techmo TTS voice %r is not offered by the service; it will use its default voice "
+            "(voice names are case-sensitive)%s",
+            name,
+            hint,
+        )
 
     async def _get_channel(self) -> grpc.aio.Channel:
         """Acquire an async gRPC channel from the pool, creating or rotating as needed."""
@@ -505,9 +535,9 @@ class TTS(tts.TTS):  # type: ignore[misc, type-arg]
         self,
         *,
         model: NotGivenOr[str] = NOT_GIVEN,
-        voice_name: NotGivenOr[str] = NOT_GIVEN,
+        voice_name: NotGivenOr[str | None] = NOT_GIVEN,
         voice_variant: NotGivenOr[int] = NOT_GIVEN,
-        language_code: NotGivenOr[str] = NOT_GIVEN,
+        language_code: NotGivenOr[str | None] = NOT_GIVEN,
         pitch: NotGivenOr[float] = NOT_GIVEN,
         speech_range: NotGivenOr[float] = NOT_GIVEN,
         rate: NotGivenOr[float] = NOT_GIVEN,
@@ -522,15 +552,16 @@ class TTS(tts.TTS):  # type: ignore[misc, type-arg]
 
         ``grpc_timeout=None`` explicitly clears a previously set deadline, deferring
         to ``conn_options.timeout`` or the module default on each call.
+        ``voice_name=None`` / ``language_code=None`` go back to the service defaults.
         """
         if is_given(model):
             self._opts.model = model
         if is_given(voice_name):
-            self._opts.voice_name = voice_name
+            self._opts.voice_name = voice_name or None
         if is_given(voice_variant):
             self._opts.voice_variant = voice_variant
         if is_given(language_code):
-            self._opts.language_code = language_code
+            self._opts.language_code = language_code or None
         if is_given(pitch):
             self._opts.pitch = pitch
         if is_given(speech_range):
@@ -1053,7 +1084,7 @@ def _make_persistent_channel(opts: TTSOptions) -> grpc.aio.Channel:
 
 def _build_request(text: str, opts: TTSOptions) -> SynthesizeRequest:
     voice = Voice(
-        name=opts.voice_name,
+        name=opts.voice_name or "",  # empty name: the service's default voice
         variant=opts.voice_variant,
     )
 
@@ -1066,7 +1097,7 @@ def _build_request(text: str, opts: TTSOptions) -> SynthesizeRequest:
     )
 
     synthesis_config = SynthesisConfig(
-        language_code=opts.language_code,
+        language_code=opts.language_code or "",
         voice=voice,
         prosodic_properties=prosody,
     )

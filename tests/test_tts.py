@@ -9,6 +9,8 @@ migration from local generated stubs, ``pip install -e .`` is sufficient.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import pathlib
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
@@ -104,8 +106,8 @@ def test_tts_options_defaults() -> None:
 
     opts = TTSOptions(service_address="localhost:9999")
     assert opts.model == "standard"
-    assert opts.voice_name == "michal"
-    assert opts.language_code == "pl-PL"
+    assert opts.voice_name is None  # service default voice
+    assert opts.language_code is None  # service default language
     assert opts.pitch == 1.0
     assert opts.speech_range == 1.0
     assert opts.rate == 1.0
@@ -2443,3 +2445,94 @@ def test_marker_event_is_immutable() -> None:
     ev = MarkerEvent(name="m1", time_s=0.5, position_samples=11025)
     with pytest.raises(dataclasses.FrozenInstanceError):
         ev.time_s = 999.0  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# Voice / language defaults: left to the service unless given
+# ---------------------------------------------------------------------------
+
+
+def test_tts_voice_and_language_default_to_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    from livekit.plugins.techmo.tts import TTS
+
+    monkeypatch.delenv("TECHMO_TTS_VOICE", raising=False)
+    monkeypatch.delenv("TECHMO_TTS_LANGUAGE", raising=False)
+    t = TTS(service_address="localhost:9999")
+    assert t._opts.voice_name is None
+    assert t._opts.language_code is None
+
+
+def test_tts_voice_and_language_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from livekit.plugins.techmo.tts import TTS
+
+    monkeypatch.setenv("TECHMO_TTS_VOICE", "Masza")
+    monkeypatch.setenv("TECHMO_TTS_LANGUAGE", "pl-PL")
+    t = TTS(service_address="localhost:9999")
+    assert t._opts.voice_name == "Masza"
+    assert t._opts.language_code == "pl-PL"
+
+
+def test_tts_empty_env_means_service_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    from livekit.plugins.techmo.tts import TTS
+
+    monkeypatch.setenv("TECHMO_TTS_VOICE", "")
+    monkeypatch.setenv("TECHMO_TTS_LANGUAGE", "")
+    t = TTS(service_address="localhost:9999")
+    assert t._opts.voice_name is None
+    assert t._opts.language_code is None
+
+
+def test_build_request_without_voice_and_language_leaves_them_empty() -> None:
+    # empty Voice.name / language_code: the service picks its configured default
+    from livekit.plugins.techmo.tts import TTSOptions, _build_request
+
+    req = _build_request("hello", TTSOptions(service_address="localhost:9999"))
+    assert req.synthesis_config.voice.name == ""
+    assert req.synthesis_config.language_code == ""
+
+
+@pytest.mark.parametrize(
+    ("voice", "available", "expected"),
+    [
+        ("Masza", ["Masza", "michal"], None),
+        ("Maszka", ["Masza", "michal"], "not offered by the service"),
+        ("MASZA", ["Masza", "masza"], "did you mean one of: Masza, masza"),
+    ],
+)
+async def test_prewarm_warns_about_unknown_voice(
+    voice: str, available: list[str], expected: str | None, caplog: pytest.LogCaptureFixture
+) -> None:
+    from livekit.plugins.techmo.tts import TTS, VoiceInfo
+
+    t = TTS(service_address="localhost:9999", voice_name=voice, output_sample_rate=16000)
+    voices = [VoiceInfo(name=n, language_codes=["pl-PL"], variants=1) for n in available]
+    with (
+        patch.object(t._pool, "acquire", AsyncMock()),
+        patch.object(t, "list_voices", AsyncMock(return_value=voices)),
+        caplog.at_level(logging.WARNING, logger="livekit.plugins.techmo.tts"),
+    ):
+        t.prewarm()
+        await asyncio.wait_for(t._prewarm_done.wait(), timeout=5)
+    voice_warnings = [r.getMessage() for r in caplog.records if "voice" in r.getMessage()]
+    if expected is None:
+        assert voice_warnings == []
+    else:
+        assert len(voice_warnings) == 1 and expected in voice_warnings[0], voice_warnings
+    await t.aclose()
+
+
+async def test_prewarm_voice_check_failure_is_not_fatal(caplog: pytest.LogCaptureFixture) -> None:
+    from livekit.agents import APIConnectionError
+
+    from livekit.plugins.techmo.tts import TTS
+
+    t = TTS(service_address="localhost:9999", voice_name="Masza", output_sample_rate=16000)
+    with (
+        patch.object(t._pool, "acquire", AsyncMock()),
+        patch.object(t, "list_voices", AsyncMock(side_effect=APIConnectionError("down"))),
+        caplog.at_level(logging.WARNING, logger="livekit.plugins.techmo.tts"),
+    ):
+        t.prewarm()
+        await asyncio.wait_for(t._prewarm_done.wait(), timeout=5)
+    assert not [r for r in caplog.records if "voice" in r.getMessage()]
+    await t.aclose()
