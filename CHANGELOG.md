@@ -4,7 +4,7 @@ All notable changes to this project will be documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [0.4.0] - 2026-10-23
 
 ### Added
 - `TTS`: Techmo TTS text-to-speech (gRPC API v3, stubs from `tts-api` 3.2.1), importable as
