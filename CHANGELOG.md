@@ -14,7 +14,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   as `MarkerEvent` (`on_marker` callback); TLS / mutual TLS from bytes or file paths; gRPC
   channel pool with lifetime rotation, `prewarm()` and reconnect on transient `UNAVAILABLE`;
   `session_id` sent as `session_id` gRPC metadata. Ported from the internal Techmo plugin
-  `livekit-plugins-techmo-tts` 0.3.2
+  `livekit-plugins-techmo-tts` 0.3.2; unlike that plugin, no random `session_id` is generated
+  when none is given (no header is sent, as with `tts-client-python`)
 - `KNOWN_ISSUES.md`: limitations of older Techmo TTS service versions and their workarounds
 - `examples/voice_agent.py`: voice agent with Techmo ASR + Techmo TTS
 - CI job testing the lowest supported `livekit-agents` (1.2.0)

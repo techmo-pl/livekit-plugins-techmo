@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-import uuid
 import weakref
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -137,8 +136,9 @@ class TTSOptions:
     client_key: bytes | None = None
     """PEM-encoded client private key for mutual TLS."""
 
-    session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    """Session ID sent as gRPC metadata header ``session_id``."""
+    session_id: str | None = None
+    """Session ID sent as gRPC metadata header ``session_id``. ``None`` = header not sent
+    (the service assigns its own ID), as in tts-client-python without ``--session-id``."""
 
     grpc_timeout: float | None = None
     """Per-instance gRPC deadline in seconds. ``None`` defers to conn_options.timeout
@@ -359,7 +359,7 @@ class TTS(tts.TTS):  # type: ignore[misc, type-arg]
             ca_cert=ca_cert,
             client_cert=client_cert,
             client_key=client_key,
-            session_id=session_id or str(uuid.uuid4()),
+            session_id=session_id or None,
             grpc_timeout=grpc_timeout,
             output_sample_rate=output_sample_rate,
             max_frame_size=max_frame_size,
@@ -1087,7 +1087,7 @@ def _build_request(text: str, opts: TTSOptions) -> SynthesizeRequest:
 def _build_metadata(opts: TTSOptions) -> list[tuple[str, str]]:
     # Key is "session_id" (underscore) — matches the Techmo TTS service convention
     # used by tts-client-python. Do not change to "session-id" (hyphen).
-    return [
-        ("session_id", opts.session_id),
-        ("user-agent", f"livekit-plugins-techmo/{__version__}"),
-    ]
+    metadata = [("user-agent", f"livekit-plugins-techmo/{__version__}")]
+    if opts.session_id:
+        metadata.insert(0, ("session_id", opts.session_id))
+    return metadata

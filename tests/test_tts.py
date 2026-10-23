@@ -110,7 +110,7 @@ def test_tts_options_defaults() -> None:
     assert opts.speech_range == 1.0
     assert opts.rate == 1.0
     assert opts.fallback_sample_rate == 22050
-    assert opts.session_id  # auto-generated UUID
+    assert opts.session_id is None  # not sent unless given
 
 
 def test_tts_options_custom() -> None:
@@ -191,6 +191,16 @@ def test_build_metadata_session_id() -> None:
     opts = TTSOptions(service_address="localhost:9999", session_id="my-session")
     metadata = _build_metadata(opts)
     assert ("session_id", "my-session") in metadata
+
+
+@pytest.mark.parametrize("session_id", [None, ""])
+def test_tts_without_session_id_sends_no_session_metadata(session_id: str | None) -> None:
+    # like tts-client-python without --session-id: no header, the service assigns its own ID
+    from livekit.plugins.techmo.tts import TTS, _build_metadata
+
+    instance = TTS(service_address="localhost:9999", session_id=session_id)
+    assert instance._opts.session_id is None
+    assert [k for k, _ in _build_metadata(instance._opts)] == ["user-agent"]
 
 
 def test_build_metadata_user_agent() -> None:

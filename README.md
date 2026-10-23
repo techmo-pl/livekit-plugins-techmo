@@ -222,7 +222,7 @@ piece of text. `livekit.plugins.techmo.tts` is also importable as a module
 | `ca_cert` / `ca_cert_file` | `bytes` / `str` | `None` | PEM CA certificate, as bytes or a file path |
 | `client_cert` / `client_cert_file` | `bytes` / `str` | `None` | PEM client certificate (mutual TLS) |
 | `client_key` / `client_key_file` | `bytes` / `str` | `None` | PEM client private key (mutual TLS) |
-| `session_id` | `str \| None` | random UUID | Session ID sent as `session_id` gRPC metadata |
+| `session_id` | `str \| None` | `None` | Session ID sent as `session_id` gRPC metadata (not sent if unset; the service assigns its own) |
 | `grpc_timeout` | `float \| None` | `None` | Per-call gRPC deadline in seconds (falls back to `conn_options.timeout`, then 30 s) |
 | `output_sample_rate` | `int` | `0` | Requested output sample rate in Hz; `0` = service native |
 | `max_frame_size` | `int` | `0` | Max audio frame size in samples per response; `0` = service default |
@@ -288,8 +288,9 @@ session starts.
 #### Session ID
 
 `session_id` is sent with every synthesis request as the `session_id` gRPC metadata header
-(note: underscore, the Techmo TTS service convention; the ASR plugin uses `session-id`). Pass
-the same value as for `STT` to correlate ASR and TTS service logs of one call.
+(note: underscore, the Techmo TTS service convention also used by `tts-client-python`; the ASR
+plugin uses `session-id`). If it is not set, no header is sent and the service assigns its own
+ID. Pass the same value as for `STT` to correlate ASR and TTS service logs of one call.
 
 #### Known Issues
 
